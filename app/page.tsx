@@ -13,9 +13,9 @@ type Todo = {
 }
 
 const SECTIONS: { key: Status; label: string; emoji: string }[] = [
-  { key: 'todo',       label: 'Not Started', emoji: '📋' },
-  { key: 'inProgress', label: 'In Progress',  emoji: '⚡' },
-  { key: 'done',       label: 'Done',         emoji: '✅' },
+  { key: 'todo',       label: '未着手', emoji: '📋' },
+  { key: 'inProgress', label: '着手中', emoji: '⚡' },
+  { key: 'done',       label: '完了',   emoji: '✅' },
 ]
 
 const NEXT_STATUS: Record<Status, Status> = {
@@ -24,22 +24,41 @@ const NEXT_STATUS: Record<Status, Status> = {
   done:       'todo',
 }
 
+const NEXT_LABEL: Record<Status, string> = {
+  todo:       '着手中にする →',
+  inProgress: '完了にする →',
+  done:       '未着手に戻す →',
+}
+
 const P = {
   bg:        '#FFF0F5',
   card:      '#FFFAFC',
-  colBg:     '#FFF5F8',
   accent:    '#FDE68A',
   accentFg:  '#9A6C00',
-  done:      '#BBF7D0',
-  doneFg:    '#16A34A',
-  inProg:    '#FDE68A',
-  inProgFg:  '#9A6C00',
   urgentBar: '#FB923C',
   del:       '#FECDD3',
   delFg:     '#BE185D',
   sep:       '#FCDDE8',
   textPri:   '#6B2D47',
   textSec:   '#C08098',
+}
+
+const STATUS_STYLE: Record<Status, {
+  colBg: string; border: string; topBar: string
+  badgeBg: string; badgeFg: string; emptyText: string
+}> = {
+  todo: {
+    colBg: '#F5F3FF', border: '#C4B5FD', topBar: '#8B5CF6',
+    badgeBg: '#EDE9FE', badgeFg: '#5B21B6', emptyText: '#A78BFA',
+  },
+  inProgress: {
+    colBg: '#FFFBEB', border: '#FDE68A', topBar: '#F59E0B',
+    badgeBg: '#FEF3C7', badgeFg: '#92400E', emptyText: '#FCD34D',
+  },
+  done: {
+    colBg: '#F0FDF4', border: '#86EFAC', topBar: '#22C55E',
+    badgeBg: '#DCFCE7', badgeFg: '#15803D', emptyText: '#86EFAC',
+  },
 }
 
 function deadlineColor(dl: string) {
@@ -121,14 +140,48 @@ export default function Home() {
           <h1 className="text-4xl font-bold" style={{ color: P.textPri, letterSpacing: '-0.5px' }}>
             ✨ My Tasks
           </h1>
-          <p className="mt-1 text-sm" style={{ color: P.textSec }}>
-            {todos.length === 0
-              ? "Let's add something to do! 🎀"
-              : [
-                  `${doneCount} of ${todos.length} done`,
-                  urgentCount > 0 ? `🔥 ${urgentCount} urgent` : null,
-                ].filter(Boolean).join(' · ')}
-          </p>
+          {todos.length === 0 ? (
+            <p className="mt-1 text-sm" style={{ color: P.textSec }}>Let's add something to do! 🎀</p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {/* ステータス別カウント */}
+              <div className="flex items-center gap-3 flex-wrap">
+                {SECTIONS.map(s => {
+                  const count = todos.filter(t => t.status === s.key).length
+                  const st = STATUS_STYLE[s.key]
+                  return (
+                    <span
+                      key={s.key}
+                      className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                      style={{ backgroundColor: st.badgeBg, color: st.badgeFg }}
+                    >
+                      {s.emoji} {s.label} {count}
+                    </span>
+                  )
+                })}
+                {urgentCount > 0 && (
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ backgroundColor: '#FEE2E2', color: '#B91C1C' }}>
+                    🔥 緊急 {urgentCount}
+                  </span>
+                )}
+              </div>
+              {/* 進捗バー */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: '#F3E8FF' }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${todos.length > 0 ? Math.round(doneCount / todos.length * 100) : 0}%`,
+                      backgroundColor: '#22C55E',
+                    }}
+                  />
+                </div>
+                <span className="text-xs font-semibold flex-shrink-0" style={{ color: P.textSec }}>
+                  {todos.length > 0 ? Math.round(doneCount / todos.length * 100) : 0}%
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Add form ── */}
@@ -191,16 +244,21 @@ export default function Home() {
               const items  = todos.filter(t => t.status === section.key)
               const sorted = [...items].sort((a, b) => Number(b.urgent) - Number(a.urgent))
 
+              const st = STATUS_STYLE[section.key]
               return (
                 <div key={section.key}>
                   {/* カラムヘッダー */}
-                  <div className="flex items-center gap-2 mb-3 px-1">
-                    <span className="text-sm font-semibold" style={{ color: P.textSec }}>
-                      {section.emoji} {section.label}
+                  <div
+                    className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl"
+                    style={{ backgroundColor: st.badgeBg }}
+                  >
+                    <span className="text-base">{section.emoji}</span>
+                    <span className="text-sm font-bold flex-1" style={{ color: st.badgeFg }}>
+                      {section.label}
                     </span>
                     <span
-                      className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
-                      style={{ backgroundColor: P.accent, color: P.accentFg }}
+                      className="text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center"
+                      style={{ backgroundColor: st.topBar, color: '#fff' }}
                     >
                       {items.length}
                     </span>
@@ -210,14 +268,15 @@ export default function Home() {
                   <div
                     className="rounded-2xl p-2 space-y-2"
                     style={{
-                      backgroundColor: P.colBg,
-                      border: `1.5px solid ${P.sep}`,
+                      backgroundColor: st.colBg,
+                      border: `1.5px solid ${st.border}`,
+                      borderTop: `3px solid ${st.topBar}`,
                       minHeight: '160px',
                     }}
                   >
                     {sorted.length === 0 ? (
                       <div className="flex items-center justify-center py-10">
-                        <span className="text-sm" style={{ color: P.textSec }}>— empty —</span>
+                        <span className="text-sm" style={{ color: st.emptyText }}>— タスクなし —</span>
                       </div>
                     ) : (
                       sorted.map(todo => (
@@ -226,37 +285,13 @@ export default function Home() {
                           className="rounded-xl px-3 py-2.5"
                           style={{
                             backgroundColor: P.card,
-                            boxShadow: '0 1px 6px rgba(255,182,193,0.2)',
-                            borderLeft: `3px solid ${todo.urgent ? P.urgentBar : 'transparent'}`,
+                            boxShadow: '0 1px 6px rgba(0,0,0,0.06)',
+                            borderLeft: `3px solid ${todo.urgent ? P.urgentBar : st.topBar}`,
+                            opacity: todo.status === 'done' ? 0.75 : 1,
                           }}
                         >
                           {/* テキスト行 */}
                           <div className="flex items-start gap-2">
-                            {/* ステータス円 */}
-                            <button
-                              onClick={() => cycleStatus(todo.id)}
-                              className="mt-0.5 w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center transition-all duration-200"
-                              style={
-                                todo.status === 'done'
-                                  ? { backgroundColor: P.done }
-                                  : todo.status === 'inProgress'
-                                  ? { backgroundColor: P.inProg }
-                                  : { backgroundColor: 'transparent', border: `2px solid ${P.accent}` }
-                              }
-                              title={`Move → ${NEXT_STATUS[todo.status]}`}
-                            >
-                              {todo.status === 'done' && (
-                                <svg viewBox="0 0 24 24" fill="none" stroke={P.doneFg} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
-                                  <polyline points="20 6 9 17 4 12" />
-                                </svg>
-                              )}
-                              {todo.status === 'inProgress' && (
-                                <svg viewBox="0 0 24 24" fill={P.inProgFg} className="w-2.5 h-2.5">
-                                  <polygon points="5 3 19 12 5 21 5 3" />
-                                </svg>
-                              )}
-                            </button>
-
                             <span
                               className="flex-1 text-sm leading-snug break-all"
                               style={{
@@ -264,6 +299,7 @@ export default function Home() {
                                 textDecoration: todo.status === 'done' ? 'line-through' : 'none',
                               }}
                             >
+                              {todo.urgent && <span className="mr-1">🔥</span>}
                               {todo.text}
                             </span>
 
@@ -273,7 +309,7 @@ export default function Home() {
                                 onClick={() => toggleUrgent(todo.id)}
                                 className="text-sm leading-none transition-all duration-150 hover:scale-110"
                                 style={{ opacity: todo.urgent ? 1 : 0.2 }}
-                                title={todo.urgent ? 'Remove urgent' : 'Mark urgent'}
+                                title={todo.urgent ? '緊急解除' : '緊急にする'}
                               >
                                 🔥
                               </button>
@@ -282,7 +318,7 @@ export default function Home() {
                                 onClick={() => remove(todo.id)}
                                 className="w-4 h-4 rounded-full flex items-center justify-center opacity-40 hover:opacity-100 transition-opacity"
                                 style={{ backgroundColor: P.del }}
-                                aria-label="Delete"
+                                aria-label="削除"
                               >
                                 <svg viewBox="0 0 24 24" fill="none" stroke={P.delFg} strokeWidth={3} strokeLinecap="round" className="w-2 h-2">
                                   <line x1="5" y1="12" x2="19" y2="12" />
@@ -292,35 +328,39 @@ export default function Home() {
                           </div>
 
                           {/* 〆切行 */}
-                          <div className="flex items-center gap-1 mt-2 ml-7">
+                          <div className="flex items-center gap-1 mt-1.5">
                             <span className="text-xs" style={{ color: todo.deadline ? deadlineColor(todo.deadline) : P.textSec }}>
                               📅
                             </span>
-                            {todo.deadline ? (
-                              <span className="text-xs font-medium" style={{ color: deadlineColor(todo.deadline) }}>
-                                {fmtDate(todo.deadline)}
-                                {todo.deadline < new Date().toISOString().split('T')[0] && ' ⚠️'}
-                                {todo.deadline === new Date().toISOString().split('T')[0] && ' · Today'}
-                              </span>
-                            ) : null}
-                            <input
-                              type="date"
-                              value={todo.deadline ?? ''}
-                              onChange={e => setDeadline(todo.id, e.target.value)}
-                              className="text-xs outline-none bg-transparent"
-                              style={{
-                                color: 'transparent',
-                                width: todo.deadline ? '16px' : '72px',
-                                cursor: 'pointer',
-                              }}
-                              title="Set deadline"
-                            />
-                            {!todo.deadline && (
-                              <span className="text-xs pointer-events-none -ml-[72px]" style={{ color: P.textSec }}>
-                                Set deadline
-                              </span>
-                            )}
+                            <div className="relative flex items-center">
+                              {todo.deadline ? (
+                                <span className="text-xs font-medium" style={{ color: deadlineColor(todo.deadline) }}>
+                                  {fmtDate(todo.deadline)}
+                                  {todo.deadline < new Date().toISOString().split('T')[0] && ' ⚠️'}
+                                  {todo.deadline === new Date().toISOString().split('T')[0] && ' · 今日'}
+                                </span>
+                              ) : (
+                                <span className="text-xs" style={{ color: P.textSec }}>締め切りを設定</span>
+                              )}
+                              <input
+                                type="date"
+                                value={todo.deadline ?? ''}
+                                onChange={e => setDeadline(todo.id, e.target.value)}
+                                className="absolute inset-0 cursor-pointer"
+                                style={{ opacity: 0, width: '100%', height: '100%' }}
+                                title="締め切りを設定"
+                              />
+                            </div>
                           </div>
+
+                          {/* ステータス変更ボタン */}
+                          <button
+                            onClick={() => cycleStatus(todo.id)}
+                            className="mt-2 w-full text-xs font-semibold py-1 rounded-lg transition-opacity hover:opacity-70"
+                            style={{ backgroundColor: st.badgeBg, color: st.badgeFg }}
+                          >
+                            {NEXT_LABEL[todo.status]}
+                          </button>
                         </div>
                       ))
                     )}
@@ -339,7 +379,7 @@ export default function Home() {
               className="text-sm transition-opacity hover:opacity-70"
               style={{ color: P.delFg }}
             >
-              🗑️ Clear all done
+              🗑️ 完了タスクをすべて削除
             </button>
           </div>
         )}
