@@ -63,9 +63,9 @@ const STATUS_STYLE: Record<Status, {
 
 function deadlineColor(dl: string) {
   const today = new Date().toISOString().split('T')[0]
-  if (dl < today)  return '#BE185D' // 期限切れ
-  if (dl === today) return '#D97706' // 今日
-  return '#C08098'                  // 将来
+  if (dl < today)  return '#BE185D'
+  if (dl === today) return '#D97706'
+  return '#C08098'
 }
 
 function fmtDate(dl: string) {
@@ -73,54 +73,80 @@ function fmtDate(dl: string) {
 }
 
 export default function Home() {
-  const [todos, setTodos]               = useState<Todo[]>([])
-  const [inputText, setInputText]       = useState('')
+  const [todos, setTodos]                 = useState<Todo[]>([])
+  const [inputText, setInputText]         = useState('')
   const [inputDeadline, setInputDeadline] = useState('')
+  const [loading, setLoading]             = useState(true)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // DBからTodoを取得
   useEffect(() => {
-    const saved = localStorage.getItem('todos')
-    if (!saved) return
-    const parsed = JSON.parse(saved)
-    setTodos(parsed.map((t: Todo & { done?: boolean }) => ({
-      id:       t.id,
-      text:     t.text,
-      urgent:   t.urgent ?? false,
-      deadline: t.deadline,
-      status:   t.status ?? (t.done ? 'done' : 'todo'),
-    })))
+    fetch('/api/todos')
+      .then(r => r.json())
+      .then((data: Todo[]) => {
+        setTodos(data)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
   }, [])
 
-  useEffect(() => {
-    localStorage.setItem('todos', JSON.stringify(todos))
-  }, [todos])
-
-  const add = () => {
+  const add = async () => {
     const text = inputText.trim()
     if (!text) return
-    setTodos(prev => [...prev, {
-      id:       crypto.randomUUID(),
-      text,
-      status:   'todo',
-      urgent:   false,
-      deadline: inputDeadline || undefined,
-    }])
+    const res = await fetch('/api/todos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        status:   'todo',
+        urgent:   false,
+        deadline: inputDeadline || null,
+      }),
+    })
+    const newTodo: Todo = await res.json()
+    setTodos(prev => [...prev, newTodo])
     setInputText('')
     setInputDeadline('')
     inputRef.current?.focus()
   }
 
-  const cycleStatus  = (id: string) =>
-    setTodos(prev => prev.map(t => t.id === id ? { ...t, status: NEXT_STATUS[t.status] } : t))
+  // 楽観的更新: UIをすぐに変更してからAPIを叩く
+  const updateTodo = async (id: string, data: Partial<Todo>) => {
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, ...data } : t))
+    await fetch(`/api/todos/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+  }
 
-  const toggleUrgent = (id: string) =>
-    setTodos(prev => prev.map(t => t.id === id ? { ...t, urgent: !t.urgent } : t))
+  const cycleStatus = (id: string) => {
+    const todo = todos.find(t => t.id === id)
+    if (!todo) return
+    updateTodo(id, { status: NEXT_STATUS[todo.status] })
+  }
 
-  const setDeadline  = (id: string, dl: string) =>
-    setTodos(prev => prev.map(t => t.id === id ? { ...t, deadline: dl || undefined } : t))
+  const toggleUrgent = (id: string) => {
+    const todo = todos.find(t => t.id === id)
+    if (!todo) return
+    updateTodo(id, { urgent: !todo.urgent })
+  }
 
-  const remove = (id: string) =>
+  const setDeadline = (id: string, dl: string) =>
+    updateTodo(id, { deadline: dl || undefined })
+
+  const remove = async (id: string) => {
     setTodos(prev => prev.filter(t => t.id !== id))
+    await fetch(`/api/todos/${id}`, { method: 'DELETE' })
+  }
+
+  const clearDone = async () => {
+    const doneIds = todos.filter(t => t.status === 'done').map(t => t.id)
+    setTodos(prev => prev.filter(t => t.status !== 'done'))
+    await Promise.all(doneIds.map(id =>
+      fetch(`/api/todos/${id}`, { method: 'DELETE' })
+    ))
+  }
 
   const urgentCount = todos.filter(t => t.urgent && t.status !== 'done').length
   const doneCount   = todos.filter(t => t.status === 'done').length
@@ -140,8 +166,10 @@ export default function Home() {
           <h1 className="text-4xl font-bold" style={{ color: P.textPri, letterSpacing: '-0.5px' }}>
             ✨ My Tasks
           </h1>
-          {todos.length === 0 ? (
-            <p className="mt-1 text-sm" style={{ color: P.textSec }}>Let's add something to do! 🎀</p>
+          {loading ? (
+            <p className="mt-1 text-sm" style={{ color: P.textSec }}>読み込み中… 🌸</p>
+          ) : todos.length === 0 ? (
+            <p className="mt-1 text-sm" style={{ color: P.textSec }}>Let&apos;s add something to do! 🎀</p>
           ) : (
             <div className="mt-3 space-y-2">
               {/* ステータス別カウント */}
@@ -232,7 +260,12 @@ export default function Home() {
         </div>
 
         {/* ── Kanban ── */}
-        {todos.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-20">
+            <div className="text-5xl mb-4 animate-pulse">🌸</div>
+            <p className="text-sm" style={{ color: P.textSec }}>データを読み込んでいます…</p>
+          </div>
+        ) : todos.length === 0 ? (
           <div className="text-center py-20">
             <div className="text-6xl mb-4">🌷</div>
             <p className="font-semibold" style={{ color: P.textPri }}>No tasks yet!</p>
@@ -375,7 +408,7 @@ export default function Home() {
         {doneCount > 0 && (
           <div className="mt-7 text-center">
             <button
-              onClick={() => setTodos(prev => prev.filter(t => t.status !== 'done'))}
+              onClick={clearDone}
               className="text-sm transition-opacity hover:opacity-70"
               style={{ color: P.delFg }}
             >
