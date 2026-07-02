@@ -77,6 +77,7 @@ export default function Home() {
   const [inputText, setInputText]         = useState('')
   const [inputDeadline, setInputDeadline] = useState('')
   const [loading, setLoading]             = useState(true)
+  const [submitting, setSubmitting]       = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // DBからTodoを取得
@@ -92,22 +93,27 @@ export default function Home() {
 
   const add = async () => {
     const text = inputText.trim()
-    if (!text) return
-    const res = await fetch('/api/todos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text,
-        status:   'todo',
-        urgent:   false,
-        deadline: inputDeadline || null,
-      }),
-    })
-    const newTodo: Todo = await res.json()
-    setTodos(prev => [...prev, newTodo])
-    setInputText('')
-    setInputDeadline('')
-    inputRef.current?.focus()
+    if (!text || submitting) return
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          status:   'todo',
+          urgent:   false,
+          deadline: inputDeadline || null,
+        }),
+      })
+      const newTodo: Todo = await res.json()
+      setTodos(prev => [...prev, newTodo])
+      setInputText('')
+      setInputDeadline('')
+      inputRef.current?.focus()
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   // 楽観的更新: UIをすぐに変更してからAPIを叩く
@@ -232,7 +238,7 @@ export default function Home() {
               type="text"
               value={inputText}
               onChange={e => setInputText(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && add()}
+              onKeyDown={e => e.key === 'Enter' && !e.nativeEvent.isComposing && add()}
               placeholder="Add a new task… 🌸"
               className="flex-1 text-base outline-none bg-transparent"
               style={{ color: P.textPri }}
